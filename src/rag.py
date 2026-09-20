@@ -46,7 +46,7 @@ class RAGAssistant:
             raise ValueError("A non-empty question and positive top_k are required.")
         results = self.retriever.search(question, top_k)
         if not results:
-            return RAGResponse("No matching documents were found.", [], [])
+            return RAGResponse("提供された資料からは確認できません", [], [])
         context = json.dumps([
             {"label": f"[{i}]", "source": result.chunk.source,
              "chunk_id": result.chunk.chunk_id, "text": result.chunk.text}

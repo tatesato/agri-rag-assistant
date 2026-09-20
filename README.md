@@ -14,7 +14,8 @@ design, LLM API integration, and offline testing without a RAG orchestration fra
 
 **Scope:** a local, single-user prototype for UTF-8 TXT and Markdown files. Included
 agricultural documents are original, fictional demo material, not field guidance.
-Live answer quality has not been evaluated; automated tests use mocked API responses.
+A live Akisakari demo run is recorded in [the verification report](docs/akisakari_demo_verification.md);
+automated tests use mocked API responses. Broad answer quality has not been evaluated.
 
 ## Features
 
@@ -95,8 +96,8 @@ python -m streamlit run app.py
 ```
 
 1. Use the supplied `data/sample_documents/` directory or choose another document directory.
-2. Click **Build / rebuild index** to embed documents and save `data/index/`.
-3. Select Top-K, enter a question, and click **Ask**.
+2. Click **索引を作成・更新** (build / rebuild index) to embed documents and save `data/index/`.
+3. Select Top-K, enter a question, and click **質問する** (ask).
 4. Review the answer, cited filenames, and expandable retrieved excerpts.
 
 Rebuild after changing documents, chunk settings, or the embedding model. Selecting a
@@ -128,15 +129,55 @@ been measured and may differ. Set Top-K to 1 to try this example.
 
 > Record root-zone moisture readings, the observation time, and recent irrigation events [1].
 
-The **Cited source files** panel would list `irrigation.md`; the excerpt panel lets the
+The **参照した資料** (cited source files) panel would list `irrigation.md`; the excerpt panel lets the
 reader inspect the evidence. The second sample,
 [soil_monitoring.txt](data/sample_documents/soil_monitoring.txt), describes sample labels
 and observation logs. Neither sample supplies fertilizer application rates.
 
-The prompt requests an answer in the question's language and an acknowledgment when
-evidence is insufficient. This is intended behavior, not a guarantee of model accuracy.
+The Japanese UI accepts Japanese and English questions. The prompt defaults to Japanese,
+while English questions or explicit English requests can receive English answers. When
+evidence is insufficient, it requests the exact response `提供された資料からは確認できません`. This is intended behavior, not a guarantee of model accuracy.
+
+### あきさかりの出穂予測デモ
+
+[公開用サンプル資料](data/sample_documents/akisakari_heading_ja.md)を追加し、
+「あきさかり」の出穂予測モデルの設計を質問できるデモにしています。
+気温と日長から日々のDVRを求め、DVIに積算して出穂閾値への到達を判定する設計、
+ベイズ最適化によるパラメータ探索、実測出穂日と予測日の比較による評価を説明します。
+実証済みの研究成果ではなく、未確認の係数・精度・予測日を記載していません。
+本アプリは資料を検索して説明するRAGであり、出穂日の数値予測を実装したものではありません。
+
+索引を再作成し、Top-Kを3にして質問してください。
+
+> あきさかりの出穂予測では、気温と日長をどのように利用しますか？
+
+資料にない具体式やパラメータは推測せず、根拠が不足する質問には
+`提供された資料からは確認できません` と答えるよう指示しています。
+オフラインテストは資料・引用の受け渡しを検証し、実際の検索順位と回答は
+`python scripts/diagnose_rag.py` で確認できます。
+
+**実APIで確認した日本語回答例**
+
+> あきさかりの出穂予測では、日々の気温と日長を説明変数として使用し、生育速度DVRを求めます。気温は温度条件、日長は昼の長さを表し、DVRを基にDVIを更新することで、生育ステージと出穂期を予測します[1]。
+
+引用元は `akisakari_heading_ja.md` です。Top-K=3の検索では同資料が1位（類似度0.608546）、
+続いて `rice_heading_ja.md`（0.550706）、`rice_heat_ja.md`（0.425871）となりました。
+単一実行の記録であり、順位や回答の再現を保証するものではありません。
+検索chunk全文と資料にない数値への回答確認は[検証記録](docs/akisakari_demo_verification.md)を参照してください。
 
 ## Testing
+
+### 索引作成の診断
+
+開発時のみ `APP_ENV=development python -m streamlit run app.py` で起動すると、
+失敗時に「開発用エラー詳細」で原因例外を含むtracebackを確認できます。
+APIキーなどの秘密値は伏せ字にし、ローカル変数は出力しません。
+通常起動では詳細を表示しません。`.env` に `APP_ENV=development` を設定することもできます。
+
+`python scripts/diagnose_rag.py` は実APIを使い、`.env`、資料読込・chunk生成、
+Embedding、NumPyのshape/dtype、FAISS作成・保存・再読込、指定の日本語質問を順に検証します。
+成功時は `data/index/rag_verification.json` に検索chunk全文、スコア、回答、引用元を保存します。
+API利用料金が発生します。通信環境や認証設定による失敗は失敗段階とtracebackで確認できます。
 
 After installing dependencies, run from the project directory:
 
@@ -144,7 +185,7 @@ After installing dependencies, run from the project directory:
 python -m pytest -q
 ```
 
-The suite contains **36 test cases** and requires no API key or external API calls.
+The suite requires no API key or external API calls.
 A fixture blocks network connections; deterministic embeddings and mock SDK clients
 exercise the pipeline while FAISS operations run locally.
 
@@ -156,7 +197,8 @@ exercise the pipeline while FAISS operations run locally.
 - An end-to-end ingestion → saved index → answer path with mocked OpenAI responses.
 
 Verification has been performed on Python 3.12 / Linux. Python 3.11, macOS, Windows,
-real API output, and full browser interaction have not been separately verified.
+and full browser interaction have not been separately verified. A single live API demo
+was verified as documented in the report above.
 
 ## Project Structure
 
@@ -168,20 +210,31 @@ agri-rag-assistant/
 ├── .env.example
 ├── pytest.ini
 ├── app.py
+├── docs/
+│   └── akisakari_demo_verification.md
+├── scripts/
+│   └── diagnose_rag.py
 ├── src/
 │   ├── __init__.py
+│   ├── diagnostics.py
 │   ├── ingest.py
 │   ├── retriever.py
 │   ├── llm.py
 │   └── rag.py
 ├── tests/
 │   ├── conftest.py
+│   ├── test_akisakari.py
+│   ├── test_diagnostics.py
+│   ├── test_japanese.py
 │   ├── test_retriever.py
 │   └── test_rag.py
 └── data/
     └── sample_documents/
         ├── irrigation.md
-        └── soil_monitoring.txt
+        ├── soil_monitoring.txt
+        ├── akisakari_heading_ja.md
+        ├── rice_heading_ja.md
+        └── rice_heat_ja.md
 ```
 
 `data/index/` is created at runtime and holds `index.faiss` and `metadata.json`.
@@ -214,6 +267,6 @@ agri-rag-assistant/
   automatically detected. Add corpus fingerprints and atomic index replacement.
 - **Deployment:** the app assumes a local, trusted, single-user environment. Authentication,
   per-user storage, concurrency control, and production monitoring are not implemented.
-- **Validation:** live model quality and cross-platform installation remain to be checked.
+- **Validation:** broader live model quality and cross-platform installation remain to be checked.
   Add CI across supported Python versions and record a reproducible live demo separately
   from the illustrative example above.

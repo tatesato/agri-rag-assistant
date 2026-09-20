@@ -117,10 +117,10 @@ def test_streamlit_initial_render_and_blank_question():
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py")).run()
     assert not app.exception
-    assert app.title[0].value == "🌱 Agri RAG Assistant"
+    assert app.title[0].value == "農業技術資料 RAGアシスタント"
     app.button[0].click().run()
     assert not app.exception
-    assert app.warning[0].value == "Enter a question first."
+    assert app.warning[0].value == "質問を入力してください。"
 
 
 def test_end_to_end_with_real_faiss_and_mocked_api(tmp_path):
