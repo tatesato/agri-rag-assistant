@@ -14,7 +14,7 @@ design, LLM API integration, and offline testing without a RAG orchestration fra
 
 **Scope:** a local, single-user prototype for UTF-8 TXT and Markdown files. Included
 agricultural documents are original, fictional demo material, not field guidance.
-A live Akisakari demo run is recorded in [the verification report](docs/akisakari_demo_verification.md);
+A live Koshihikari demo run is recorded in [the verification report](docs/koshihikari_demo_verification.md);
 automated tests use mocked API responses. Broad answer quality has not been evaluated.
 
 ## Features
@@ -138,10 +138,12 @@ The Japanese UI accepts Japanese and English questions. The prompt defaults to J
 while English questions or explicit English requests can receive English answers. When
 evidence is insufficient, it requests the exact response `提供された資料からは確認できません`. This is intended behavior, not a guarantee of model accuracy.
 
-### あきさかりの出穂予測デモ
+### コシヒカリの出穂予測デモ
 
-[公開用サンプル資料](data/sample_documents/akisakari_heading_ja.md)を追加し、
-「あきさかり」の出穂予測モデルの設計を質問できるデモにしています。
+[公開用サンプル資料](data/sample_documents/koshihikari_heading_ja.md)を追加し、
+「コシヒカリ」の出穂予測モデルの設計を質問できるデモにしています。
+出穂とは稲の穂が外に現れることです。DVRは「その日の生育の進み具合」、
+DVIは「これまでの進み具合の合計」として説明しています。
 気温と日長から日々のDVRを求め、DVIに積算して出穂閾値への到達を判定する設計、
 ベイズ最適化によるパラメータ探索、実測出穂日と予測日の比較による評価を説明します。
 実証済みの研究成果ではなく、未確認の係数・精度・予測日を記載していません。
@@ -149,7 +151,7 @@ evidence is insufficient, it requests the exact response `提供された資料�
 
 索引を再作成し、Top-Kを3にして質問してください。
 
-> あきさかりの出穂予測では、気温と日長をどのように利用しますか？
+> コシヒカリの出穂予測では、気温と日長をどのように利用しますか？
 
 資料にない具体式やパラメータは推測せず、根拠が不足する質問には
 `提供された資料からは確認できません` と答えるよう指示しています。
@@ -158,12 +160,18 @@ evidence is insufficient, it requests the exact response `提供された資料�
 
 **実APIで確認した日本語回答例**
 
-> あきさかりの出穂予測では、日々の気温と日長を説明変数として使用し、生育速度DVRを求めます。気温は温度条件、日長は昼の長さを表し、DVRを基にDVIを更新することで、生育ステージと出穂期を予測します[1]。
+> コシヒカリの出穂予測では、日々の気温と日長を説明変数として生育速度DVRを求めます。DVRは1日あたりの生育の進み具合を表し、DVIは累積された生育ステージの指標として扱われます。設定した起算日の初期DVIに日々のDVRを加算し、DVIが設定した一定の閾値に達するか超える日を予測出穂日として扱います。[1]
 
-引用元は `akisakari_heading_ja.md` です。Top-K=3の検索では同資料が1位（類似度0.608546）、
-続いて `rice_heading_ja.md`（0.550706）、`rice_heat_ja.md`（0.425871）となりました。
+引用元は `koshihikari_heading_ja.md` です。Top-K=3の検索結果は以下のとおりです。
+
+|順位|資料|類似度|
+|---|---|---|
+|1|koshihikari_heading_ja.md|0.623739|
+|2|rice_heading_ja.md|0.500960|
+|3|rice_heat_ja.md|0.416785|
+
 単一実行の記録であり、順位や回答の再現を保証するものではありません。
-検索chunk全文と資料にない数値への回答確認は[検証記録](docs/akisakari_demo_verification.md)を参照してください。
+検索chunk全文と資料との照合結果は[検証記録](docs/koshihikari_demo_verification.md)を参照してください。
 
 ## Testing
 
@@ -211,7 +219,7 @@ agri-rag-assistant/
 ├── pytest.ini
 ├── app.py
 ├── docs/
-│   └── akisakari_demo_verification.md
+│   └── koshihikari_demo_verification.md
 ├── scripts/
 │   └── diagnose_rag.py
 ├── src/
@@ -223,7 +231,7 @@ agri-rag-assistant/
 │   └── rag.py
 ├── tests/
 │   ├── conftest.py
-│   ├── test_akisakari.py
+│   ├── test_koshihikari.py
 │   ├── test_diagnostics.py
 │   ├── test_japanese.py
 │   ├── test_retriever.py
@@ -232,7 +240,7 @@ agri-rag-assistant/
     └── sample_documents/
         ├── irrigation.md
         ├── soil_monitoring.txt
-        ├── akisakari_heading_ja.md
+        ├── koshihikari_heading_ja.md
         ├── rice_heading_ja.md
         └── rice_heat_ja.md
 ```

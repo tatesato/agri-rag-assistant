@@ -50,7 +50,7 @@ def main():
         print('dimension:', restored.index.d, 'count:', restored.index.ntotal, flush=True)
         stage = "RAG"
         print(stage, flush=True)
-        question = 'あきさかりの出穂予測では、気温と日長をどのように利用しますか？'
+        question = 'コシヒカリの出穂予測では、気温と日長をどのように利用しますか？'
         response = RAGAssistant(restored, OpenAIAnswerer(client, os.getenv('OPENAI_CHAT_MODEL', 'gpt-4o-mini'))).ask(question)
         report = {'question': question, 'answer': response.answer, 'sources': response.sources,
                   'results': [{'source': r.chunk.source, 'chunk_id': r.chunk.chunk_id,

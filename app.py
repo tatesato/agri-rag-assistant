@@ -18,13 +18,13 @@ def main() -> None:
     """Build or load the index and display grounded answers with evidence."""
     st.set_page_config(page_title="農業技術資料 RAGアシスタント", page_icon="🌱")
     st.title("農業技術資料 RAGアシスタント")
-    st.caption("あきさかりの出穂予測を題材に、農業技術資料を検索し、根拠を参照して回答します。")
+    st.caption("コシヒカリの出穂予測を題材に、農業技術資料を検索し、根拠を参照して回答します。")
     st.info("サンプル資料はデモ用です。索引作成と質問時には文章をOpenAIへ送信します。")
     directory = st.sidebar.text_input("資料フォルダ", str(ROOT / "data/sample_documents"))
     top_k = st.sidebar.slider("検索する資料断片の数（Top-K）", 1, 10, 3)
     build = st.sidebar.button("索引を作成・更新")
-    question = st.text_input("質問を入力してください", placeholder="あきさかりの出穂予測では、気温と日長をどのように利用しますか？")
-    st.caption("質問例：あきさかりの出穂予測では、気温と日長をどのように利用しますか？")
+    question = st.text_input("質問を入力してください", placeholder="コシヒカリの出穂予測では、気温と日長をどのように利用しますか？")
+    st.caption("質問例：コシヒカリの出穂予測では、気温と日長をどのように利用しますか？")
     submit = st.button("質問する")
     if not (build or submit):
         return
