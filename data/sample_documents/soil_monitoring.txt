@@ -1,0 +1,6 @@
+Soil monitoring observation demo
+
+This original fictional document is supplied only for testing the application.
+In the demo workflow, each soil sample is labeled with its bed identifier, sampling depth,
+and collection date. Results are stored with the observation log. Missing labels are recorded
+as a data-quality issue. This document does not define fertilizer application rates.
