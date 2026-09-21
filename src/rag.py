@@ -53,6 +53,8 @@ class RAGAssistant:
             for i, result in enumerate(results, 1)
         ], ensure_ascii=False)
         answer = self.answerer.answer(question, context)
+        # Japanese answers may use corner brackets for the same numeric labels.
+        answer = re.sub(r"【([0-9]+)】", r"[\1]", answer)
         labels = [int(value) for value in re.findall(r"\[(\d+)\]", answer)]
         if any(label < 1 or label > len(results) for label in labels):
             raise ValueError("The answer contains an unknown citation. Please retry.")

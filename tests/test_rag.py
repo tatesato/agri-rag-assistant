@@ -36,7 +36,7 @@ def test_no_results_skips_llm():
     answerer.answer.assert_not_called()
 
 
-@pytest.mark.parametrize("answer", ["Claim [0]", "Claim [2]"])
+@pytest.mark.parametrize("answer", ["Claim [0]", "Claim [2]", "説明【2】"])
 def test_unknown_citation_is_rejected(answer):
     searcher, answerer = Mock(), Mock()
     searcher.search.return_value = [SearchResult(Chunk("text", "a.md", 0), 1)]
@@ -50,6 +50,15 @@ def test_abstention_does_not_invent_sources():
     searcher.search.return_value = [SearchResult(Chunk("text", "a.md", 0), 1)]
     answerer.answer.return_value = "The supplied evidence is insufficient."
     assert RAGAssistant(searcher, answerer).ask("question").sources == []
+
+
+def test_japanese_corner_bracket_citation_maps_to_source():
+    searcher, answerer = Mock(), Mock()
+    searcher.search.return_value = [SearchResult(Chunk("text", "a.md", 0), 1)]
+    answerer.answer.return_value = "説明【1】。"
+    result = RAGAssistant(searcher, answerer).ask("question")
+    assert result.answer == "説明[1]。"
+    assert result.sources == ["a.md"]
 
 
 def test_blank_question_skips_dependencies():
