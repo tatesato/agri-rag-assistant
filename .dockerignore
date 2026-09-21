@@ -1,0 +1,24 @@
+# Allow only runtime sources and the public sample corpus into the build context.
+# This excludes .env*, .git, .venv, caches, tests, docs, scripts and data/index.
+**
+!Dockerfile
+!.dockerignore
+!requirements.txt
+!app.py
+!src/
+!src/*.py
+!data/
+!data/sample_documents/
+!data/sample_documents/irrigation.md
+!data/sample_documents/soil_monitoring.txt
+!data/sample_documents/koshihikari_heading_ja.md
+!data/sample_documents/rice_heading_ja.md
+!data/sample_documents/rice_heat_ja.md
+
+# Explicit exclusions take precedence over directory allow rules above.
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.env*
+**/.venv/
+**/.git/

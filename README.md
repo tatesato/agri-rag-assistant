@@ -108,6 +108,77 @@ Building and querying make paid API requests. Document chunks and questions are 
 to OpenAI. Never commit `.env`; `.env.example` contains only an empty key field and model
 settings. Load only indexes generated locally by this application.
 
+## Dockerでの実行
+
+公式の `python:3.11-slim-bookworm` を使用し、`requirements.txt` から依存関係を
+インストールします。既存のローカル起動方法もそのまま利用できます。
+
+```bash
+docker build -t agri-rag-assistant:local .
+docker run --rm --name agri-rag-assistant \
+  -p 127.0.0.1:8501:8501 \
+  --env-file .env -e APP_ENV=production \
+  --mount type=volume,src=agri-rag-index,dst=/app/data/index \
+  agri-rag-assistant:local
+```
+
+ブラウザで `http://localhost:8501` を開き、「索引を作成・更新」を押してから質問します。
+`--env-file` はホストの設定値を起動時の環境変数として渡す指定で、`.env` 自体は
+イメージにもコンテナにもコピー・マウントしません。
+Dockerのenv-fileには `OPENAI_API_KEY=値` の形式で記載し、値を引用符で囲まないでください。
+既にホストでキーを環境変数に設定している場合は、`--env-file .env` の代わりに
+`-e OPENAI_API_KEY` を指定できます。モデル変更時は `OPENAI_EMBEDDING_MODEL` と
+`OPENAI_CHAT_MODEL` も起動時の環境変数で渡せます。
+
+コンテナ内では非rootユーザー（UID/GID `10001`）が `0.0.0.0:8501` で待ち受けます。
+`/_stcore/health` のHTTPヘルスチェックを設定しています。確認と停止は次のとおりです。
+
+```bash
+docker inspect --format '{{.State.Health.Status}}' agri-rag-assistant
+docker stop agri-rag-assistant
+```
+
+### 索引とイメージの内容
+
+- 公開サンプル5資料を含め、既存の `data/index/` はbuild対象から除外します。
+- 索引は起動後の明示的なボタン操作で生成します。起動・buildだけではAPIを呼びません。
+- 索引保存先 `/app/data/index` だけをアプリ用の書込可能ディレクトリにしています。
+  上のnamed volumeでコンテナ再作成後も索引を保持できます。volume指定を省くと、
+  コンテナ削除時に索引も失われます。資料やEmbeddingモデル変更時は再作成してください。
+- bind mountや外部ストレージを利用する場合はUID/GID `10001`に書込権限を与えてください。
+  単一利用者向けのため、索引を更新するコンテナは1つにしてください。
+- `.dockerignore`は許可した実行用ファイルだけをbuildに渡します。
+  `.env*`、Git履歴、仮想環境、ホストのキャッシュ、テスト、開発用スクリプト、
+  `docs/`の検証記録、生成JSON、FAISS生成物を含めません。
+  新しい公開サンプルを同梱する場合は `.dockerignore` の許可リストも更新してください。
+
+### AWSに配置する際の設定
+
+この変更はコンテナ構成の準備までで、AWSへのデプロイは行っていません。
+コンテナポートは `8501`、HTTPヘルスチェックパスは `/_stcore/health` です。
+APIキーはデプロイ先のシークレット管理から実行時環境変数 `OPENAI_API_KEY` に渡し、
+Dockerfileの `ARG` / `ENV` やbuild引数には設定しないでください。
+索引用の書込先と、外部OpenAI APIへのHTTPS通信を確保してください。
+複数レプリカで共有索引を同時更新する構成は未対応です。
+アプリには利用者認証がないため、公開時は認証付きの入口を設け、API利用を制限してください。
+
+### Docker検証結果（2026-09-21）
+
+- ローカルおよびPython 3.11コンテナ内のpytest：各47件成功。
+- `docker build`：成功。検証時のイメージは673,412,005 bytes（約642.2 MiB、非圧縮）。
+- APIキーなしで起動し、非root実行、healthy、ホスト経由のHTTP 200を確認。
+- 実行時にAPIキーを渡したコンテナ内のStreamlit AppTestで、サンプル5資料の
+  索引作成・質問応答・引用表示を確認。コシヒカリの気温・日長に関する回答は
+  `koshihikari_heading_ja.md` を引用。named volumeから索引を再読込できることも確認。
+- イメージ全レイヤーを検査し、実APIキー、`.env*`、ホストの仮想環境・Git・
+  キャッシュ・生成済み索引が混入していないことを確認。
+
+依存関係はバージョン範囲指定のため、再build時のサイズは変わる場合があります。
+実API検証は単一実行で、回答品質全般やAWS上での動作を保証するものではありません。
+
+構成の参考：[StreamlitのDockerガイド](https://docs.streamlit.io/deploy/tutorials/docker)、
+[Dockerのbuild contextと除外設定](https://docs.docker.com/build/concepts/context/)。
+
 ## Example
 
 **Illustrative walkthrough, not a recorded API run.** The question, retrieved-source
@@ -204,9 +275,9 @@ exercise the pipeline while FAISS operations run locally.
 - Streamlit initial rendering and blank-question handling through `AppTest`.
 - An end-to-end ingestion → saved index → answer path with mocked OpenAI responses.
 
-Verification has been performed on Python 3.12 / Linux. Python 3.11, macOS, Windows,
-and full browser interaction have not been separately verified. A single live API demo
-was verified as documented in the report above.
+Verification has been performed on Python 3.12 / Linux and Python 3.11 in Docker.
+macOS, Windows, and full browser interaction have not been separately verified.
+A single live API demo was verified as documented in the report above.
 
 ## Project Structure
 
@@ -214,6 +285,8 @@ was verified as documented in the report above.
 agri-rag-assistant/
 ├── README.md
 ├── requirements.txt
+├── Dockerfile
+├── .dockerignore
 ├── .gitignore
 ├── .env.example
 ├── pytest.ini
