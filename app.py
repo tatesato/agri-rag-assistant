@@ -57,12 +57,17 @@ def main() -> None:
                 with st.expander(f"[{i}] {result.chunk.source} · 類似度 {result.score:.3f}"):
                     st.text(result.chunk.text)
     except Exception as exc:
-        st.error("処理できませんでした。.envのAPIキー、モデルの利用権限、UTF-8の資料フォルダ、"
-                 "通信状態を確認してください。質問する前に索引を作成・更新してください。")
+        import traceback
+        traceback.print_exc()
+
+        st.error(
+            "処理できませんでした。APIキー、モデルの利用権限、資料フォルダ、"
+            "通信状態を確認してください。質問する前に索引を作成・更新してください。"
+        )
+
         if os.getenv("APP_ENV") == "development":
             with st.expander("開発用エラー詳細", expanded=True):
                 st.code(safe_traceback(exc), language="text")
-
 
 if __name__ == "__main__":
     main()

@@ -1,73 +1,119 @@
 # agri-rag-assistant
 
-Search agricultural documents and ask questions in a Streamlit app that returns
-LLM answers with numbered citations and inspectable source excerpts.
+農業技術資料を検索し、根拠となる資料を引用しながら回答する
+**RAG（Retrieval-Augmented Generation）アプリケーション**です。
 
-## Overview
+Python / OpenAI API / FAISS / Streamlit でRAGパイプラインを実装し、
+Dockerコンテナ化したうえで **Amazon ECS / AWS Fargate 上へのデプロイまで実施**しています。
 
-This portfolio project implements a complete retrieval-augmented generation (RAG)
-pipeline: document ingestion, overlapping chunks, embedding generation, persistent
-vector search, and evidence-based answer generation. It demonstrates Python application
-design, LLM API integration, and offline testing without a RAG orchestration framework.
+## 概要
 
-**Stack:** Python 3.11+ · OpenAI API · FAISS · NumPy · Streamlit · pytest · python-dotenv
+本プロジェクトでは、農業技術資料を対象として次の一連の処理を実装しています。
 
-**Scope:** a local, single-user prototype for UTF-8 TXT and Markdown files. Included
-agricultural documents are original, fictional demo material, not field guidance.
-A live Koshihikari demo run is recorded in [the verification report](docs/koshihikari_demo_verification.md);
-automated tests use mocked API responses. Broad answer quality has not been evaluated.
+1. TXT / Markdown資料の読み込み
+2. 文書のチャンク分割
+3. OpenAI Embeddingsによるベクトル化
+4. FAISSへの索引登録
+5. 質問文のEmbedding
+6. 類似資料のTop-K検索
+7. 検索した資料だけを根拠としてLLMへ入力
+8. 引用付き回答の生成
+9. 引用元資料・類似度・検索本文の表示
 
-## Features
+RAGフレームワークには依存せず、文書読込・検索・LLM呼び出し・引用処理を
+小さなPythonモジュールとして実装しています。
 
-- Recursively ingest `.txt` and `.md` files, retaining relative source paths and chunk IDs.
-- Split text into overlapping chunks and generate embeddings in batches.
-- Save and reload a local FAISS index with readable JSON metadata.
-- Retrieve Top-K excerpts using cosine similarity and show their scores in the UI.
-- Send only retrieved excerpts as evidence to a stateless LLM request.
-- Map numbered citations to source filenames and expose the retrieved text for inspection.
-- Load credentials from `.env` or the environment; keep secrets and generated files out of Git.
-- Test real FAISS search and persistence with deterministic embeddings and mocked SDK clients.
+さらにDocker化し、Amazon ECRへイメージを登録して
+Amazon ECS / AWS Fargate上で実際に動作確認しています。
 
-## Architecture
+## 技術スタック
 
-Documents are indexed once. Each question is embedded with the same model and used to
-retrieve the closest chunks. The LLM receives the question and those excerpts, with
-instructions to cite evidence and acknowledge insufficient information.
+- Python 3.11+
+- OpenAI API
+- FAISS
+- NumPy
+- Streamlit
+- Docker
+- Amazon ECR
+- Amazon ECS
+- AWS Fargate
+- AWS Secrets Manager
+- Amazon CloudWatch Logs
+- pytest
+- python-dotenv
+
+## 主な機能
+
+- `.txt` / `.md` ファイルの再帰的読み込み
+- UTF-8日本語資料への対応
+- オーバーラップ付きチャンク分割
+- OpenAI Embeddingsによるベクトル化
+- FAISSによるベクトル検索
+- Top-K検索
+- コサイン類似度表示
+- 検索資料だけを根拠とする回答生成
+- `[1]` 形式の引用番号検証
+- 引用元ファイル名の表示
+- 検索されたチャンク本文の確認
+- FAISS索引の保存・再読み込み
+- Dockerコンテナ化
+- 非rootユーザーでのコンテナ実行
+- AWS Secrets ManagerによるAPIキー管理
+- ECS / Fargateへのデプロイ
+- CloudWatch Logsへの例外出力
+- モックAPIを使用したオフラインテスト
+
+## RAGアーキテクチャ
 
 ```mermaid
 flowchart LR
-    D[Document: TXT / Markdown] --> C[Chunking]
-    C --> E[Embedding]
-    E --> F[FAISS]
-    F --> R[Retrieval: Top-K]
-    Q[Question] --> QE[Query embedding]
-    QE --> R
-    R -->|Retrieved excerpts only| L[LLM]
+    D[農業技術資料<br>TXT / Markdown] --> C[Chunking]
+    C --> E[OpenAI Embeddings]
+    E --> F[FAISS Index]
+
+    Q[質問] --> QE[Query Embedding]
+    QE --> R[Top-K Retrieval]
+    F --> R
+
+    R -->|検索された資料のみ| L[LLM]
     Q --> L
-    L --> A[Answer with citations]
+
+    L --> A[引用付き回答]
 ```
 
-| Component | Responsibility |
+文書登録時にEmbeddingを生成してFAISSへ保存します。
+
+質問時には質問文を同じEmbeddingモデルでベクトル化し、
+FAISSから類似する資料断片を取得します。
+
+LLMには質問文と検索された資料断片だけを渡し、
+資料に基づいた回答と引用番号の生成を求めます。
+
+## モジュール構成
+
+| ファイル | 役割 |
 | --- | --- |
-| `src/ingest.py` | UTF-8 loading and character windows: 800 characters, 120 overlap by default |
-| `src/retriever.py` | Vector validation, normalization, FAISS search, index and metadata persistence |
-| `src/llm.py` | Batched OpenAI embeddings, Responses API adapter, environment loading |
-| `src/rag.py` | Evidence assembly, numeric citation validation, cited filename mapping |
-| `app.py` | Index build controls, question input, answers, and expandable excerpts |
+| `src/ingest.py` | UTF-8資料の読み込みとチャンク分割 |
+| `src/retriever.py` | FAISS検索、ベクトル正規化、索引保存・読込 |
+| `src/llm.py` | OpenAI Embeddings / 回答生成API |
+| `src/rag.py` | RAG処理、引用番号検証、引用元ファイル対応 |
+| `src/diagnostics.py` | エラー情報の安全な表示 |
+| `app.py` | Streamlit UI、索引作成、質問応答 |
 
-The default embedding model is `text-embedding-3-small`; the answer model is
-`gpt-4o-mini`. Both are configurable through environment variables. The implementation
-uses the official OpenAI APIs for
-[embeddings](https://developers.openai.com/api/docs/guides/embeddings) and
-[text generation](https://developers.openai.com/api/docs/guides/text).
+デフォルトでは以下を使用します。
 
-## Quick Start
+```text
+Embedding: text-embedding-3-small
+Chat model: gpt-4o-mini
+```
 
-### Installation
+環境変数で変更できます。
 
-From the project directory, create a virtual environment with Python 3.11 or newer.
+## ローカル環境での実行
 
-**macOS / Linux**
+### 仮想環境の作成
+
+Linux / macOS:
 
 ```bash
 python3 -m venv .venv
@@ -76,7 +122,7 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-**Windows PowerShell**
+Windows PowerShell:
 
 ```powershell
 py -m venv .venv
@@ -85,201 +131,484 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Set `OPENAI_API_KEY` in your local `.env`. Optionally change
-`OPENAI_EMBEDDING_MODEL` and `OPENAI_CHAT_MODEL`. Existing environment variables take
-precedence over `.env`. API access to the selected models is required.
+`.env` にOpenAI APIキーを設定します。
 
-### Usage
+```text
+OPENAI_API_KEY=your-api-key
+```
+
+必要に応じてモデルも変更できます。
+
+```text
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_CHAT_MODEL=gpt-4o-mini
+```
+
+### Streamlit起動
 
 ```bash
 python -m streamlit run app.py
 ```
 
-1. Use the supplied `data/sample_documents/` directory or choose another document directory.
-2. Click **索引を作成・更新** (build / rebuild index) to embed documents and save `data/index/`.
-3. Select Top-K, enter a question, and click **質問する** (ask).
-4. Review the answer, cited filenames, and expandable retrieved excerpts.
+ブラウザで表示されたStreamlit画面を開きます。
 
-Rebuild after changing documents, chunk settings, or the embedding model. Selecting a
-new directory alone does not replace the saved index. Generated indexes are excluded
-from Git and must be built locally after downloading the project.
+操作手順：
 
-Building and querying make paid API requests. Document chunks and questions are sent
-to OpenAI. Never commit `.env`; `.env.example` contains only an empty key field and model
-settings. Load only indexes generated locally by this application.
+1. 資料フォルダを指定
+2. **「索引を作成・更新」** をクリック
+3. Top-Kを選択
+4. 質問を入力
+5. **「質問する」** をクリック
+6. 回答・引用元・類似度・検索本文を確認
 
-## Dockerでの実行
+資料、チャンク設定、Embeddingモデルを変更した場合は
+索引を再作成してください。
 
-公式の `python:3.11-slim-bookworm` を使用し、`requirements.txt` から依存関係を
-インストールします。既存のローカル起動方法もそのまま利用できます。
+## Docker
+
+公式の
+
+```text
+python:3.11-slim-bookworm
+```
+
+をベースイメージとして使用しています。
+
+### ビルド
 
 ```bash
 docker build -t agri-rag-assistant:local .
+```
+
+### 実行
+
+```bash
 docker run --rm --name agri-rag-assistant \
   -p 127.0.0.1:8501:8501 \
-  --env-file .env -e APP_ENV=production \
+  --env-file .env \
+  -e APP_ENV=production \
   --mount type=volume,src=agri-rag-index,dst=/app/data/index \
   agri-rag-assistant:local
 ```
 
-ブラウザで `http://localhost:8501` を開き、「索引を作成・更新」を押してから質問します。
-`--env-file` はホストの設定値を起動時の環境変数として渡す指定で、`.env` 自体は
-イメージにもコンテナにもコピー・マウントしません。
-Dockerのenv-fileには `OPENAI_API_KEY=値` の形式で記載し、値を引用符で囲まないでください。
-既にホストでキーを環境変数に設定している場合は、`--env-file .env` の代わりに
-`-e OPENAI_API_KEY` を指定できます。モデル変更時は `OPENAI_EMBEDDING_MODEL` と
-`OPENAI_CHAT_MODEL` も起動時の環境変数で渡せます。
+ブラウザで、
 
-コンテナ内では非rootユーザー（UID/GID `10001`）が `0.0.0.0:8501` で待ち受けます。
-`/_stcore/health` のHTTPヘルスチェックを設定しています。確認と停止は次のとおりです。
+```text
+http://localhost:8501
+```
+
+を開きます。
+
+### コンテナのセキュリティ
+
+コンテナ内では非rootユーザーを使用します。
+
+```text
+UID: 10001
+GID: 10001
+```
+
+Streamlitは、
+
+```text
+0.0.0.0:8501
+```
+
+で待ち受けます。
+
+APIキーをDockerfileやDockerイメージへ保存しません。
+
+`.env` もDockerイメージにはコピーしません。
+
+## ヘルスチェック
+
+DockerfileではStreamlitのヘルスチェックエンドポイント、
+
+```text
+/_stcore/health
+```
+
+を利用しています。
+
+確認：
 
 ```bash
 docker inspect --format '{{.State.Health.Status}}' agri-rag-assistant
+```
+
+停止：
+
+```bash
 docker stop agri-rag-assistant
 ```
 
-### 索引とイメージの内容
+## FAISS索引
 
-- 公開サンプル5資料を含め、既存の `data/index/` はbuild対象から除外します。
-- 索引は起動後の明示的なボタン操作で生成します。起動・buildだけではAPIを呼びません。
-- 索引保存先 `/app/data/index` だけをアプリ用の書込可能ディレクトリにしています。
-  上のnamed volumeでコンテナ再作成後も索引を保持できます。volume指定を省くと、
-  コンテナ削除時に索引も失われます。資料やEmbeddingモデル変更時は再作成してください。
-- bind mountや外部ストレージを利用する場合はUID/GID `10001`に書込権限を与えてください。
-  単一利用者向けのため、索引を更新するコンテナは1つにしてください。
-- `.dockerignore`は許可した実行用ファイルだけをbuildに渡します。
-  `.env*`、Git履歴、仮想環境、ホストのキャッシュ、テスト、開発用スクリプト、
-  `docs/`の検証記録、生成JSON、FAISS生成物を含めません。
-  新しい公開サンプルを同梱する場合は `.dockerignore` の許可リストも更新してください。
+索引は、
 
-### AWSに配置する際の設定
+```text
+data/index/
+```
 
-この変更はコンテナ構成の準備までで、AWSへのデプロイは行っていません。
-コンテナポートは `8501`、HTTPヘルスチェックパスは `/_stcore/health` です。
-APIキーはデプロイ先のシークレット管理から実行時環境変数 `OPENAI_API_KEY` に渡し、
-Dockerfileの `ARG` / `ENV` やbuild引数には設定しないでください。
-索引用の書込先と、外部OpenAI APIへのHTTPS通信を確保してください。
-複数レプリカで共有索引を同時更新する構成は未対応です。
-アプリには利用者認証がないため、公開時は認証付きの入口を設け、API利用を制限してください。
+に作成されます。
 
-### Docker検証結果（2026-09-21）
+主な生成ファイル：
 
-- ローカルおよびPython 3.11コンテナ内のpytest：各47件成功。
-- `docker build`：成功。検証時のイメージは673,412,005 bytes（約642.2 MiB、非圧縮）。
-- APIキーなしで起動し、非root実行、healthy、ホスト経由のHTTP 200を確認。
-- 実行時にAPIキーを渡したコンテナ内のStreamlit AppTestで、サンプル5資料の
-  索引作成・質問応答・引用表示を確認。コシヒカリの気温・日長に関する回答は
-  `koshihikari_heading_ja.md` を引用。named volumeから索引を再読込できることも確認。
-- イメージ全レイヤーを検査し、実APIキー、`.env*`、ホストの仮想環境・Git・
-  キャッシュ・生成済み索引が混入していないことを確認。
+```text
+data/index/
+├── index.faiss
+└── metadata.json
+```
 
-依存関係はバージョン範囲指定のため、再build時のサイズは変わる場合があります。
-実API検証は単一実行で、回答品質全般やAWS上での動作を保証するものではありません。
+生成された索引はGit管理対象外です。
 
-構成の参考：[StreamlitのDockerガイド](https://docs.streamlit.io/deploy/tutorials/docker)、
-[Dockerのbuild contextと除外設定](https://docs.docker.com/build/concepts/context/)。
+Dockerでは、
 
-## Example
+```text
+/app/data/index
+```
 
-**Illustrative walkthrough, not a recorded API run.** The question, retrieved-source
-list, and answer below are hand-written to explain the interface using the supplied
-sample documents. Actual retrieval order, scores, wording, and citation IDs have not
-been measured and may differ. Set Top-K to 1 to try this example.
+を書き込み可能なディレクトリとして使用します。
 
-**Question**
+named volumeを利用するとコンテナを再作成しても索引を保持できます。
 
-> What should I record before reviewing the irrigation schedule?
+## AWSデプロイ
 
-**Retrieved sources (illustrative)**
+本アプリケーションはDocker化したうえで、
+**Amazon ECS / AWS Fargate上で実際に動作確認しています。**
 
-| Citation | Source | Relevant content in the sample file |
-| --- | --- | --- |
-| [1] | [irrigation.md](data/sample_documents/irrigation.md) | The demo operator records root-zone moisture readings, the observation time, and recent irrigation events before reviewing the schedule. |
+AWS構成は次のとおりです。
 
-**Answer (illustrative)**
+```text
+Browser
+   |
+   | HTTP :8501
+   v
+Amazon ECS / AWS Fargate
+   |
+   +-- Streamlit
+   |
+   +-- RAG Pipeline
+   |     |
+   |     +-- Document ingestion
+   |     +-- OpenAI Embeddings
+   |     +-- FAISS
+   |     `-- OpenAI answer generation
+   |
+   +-- AWS Secrets Manager
+   |     `-- OPENAI_API_KEY
+   |
+   +-- Amazon CloudWatch Logs
+   |     `-- Application logs / Traceback
+   |
+   `-- Amazon ECR
+         `-- Docker image
+```
 
-> Record root-zone moisture readings, the observation time, and recent irrigation events [1].
+## AWSサービスの役割
 
-The **参照した資料** (cited source files) panel would list `irrigation.md`; the excerpt panel lets the
-reader inspect the evidence. The second sample,
-[soil_monitoring.txt](data/sample_documents/soil_monitoring.txt), describes sample labels
-and observation logs. Neither sample supplies fertilizer application rates.
+| AWSサービス | 用途 |
+| --- | --- |
+| Amazon ECR | Dockerイメージの保存 |
+| Amazon ECS | コンテナ管理 |
+| AWS Fargate | サーバーレスでのコンテナ実行 |
+| AWS Secrets Manager | OpenAI APIキーの安全な保存 |
+| Amazon CloudWatch Logs | コンテナログ・Python例外の確認 |
 
-The Japanese UI accepts Japanese and English questions. The prompt defaults to Japanese,
-while English questions or explicit English requests can receive English answers. When
-evidence is insufficient, it requests the exact response `提供された資料からは確認できません`. This is intended behavior, not a guarantee of model accuracy.
+## Amazon ECR
 
-### コシヒカリの出穂予測デモ
+Dockerイメージをビルド後、Amazon ECRへ登録します。
 
-[公開用サンプル資料](data/sample_documents/koshihikari_heading_ja.md)を追加し、
-「コシヒカリ」の出穂予測モデルの設計を質問できるデモにしています。
-出穂とは稲の穂が外に現れることです。DVRは「その日の生育の進み具合」、
-DVIは「これまでの進み具合の合計」として説明しています。
-気温と日長から日々のDVRを求め、DVIに積算して出穂閾値への到達を判定する設計、
-ベイズ最適化によるパラメータ探索、実測出穂日と予測日の比較による評価を説明します。
-実証済みの研究成果ではなく、未確認の係数・精度・予測日を記載していません。
-本アプリは資料を検索して説明するRAGであり、出穂日の数値予測を実装したものではありません。
+### ECRログイン
 
-索引を再作成し、Top-Kを3にして質問してください。
+```bash
+aws ecr get-login-password --region ap-northeast-1 | \
+docker login --username AWS --password-stdin \
+<ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com
+```
+
+### タグ付け
+
+```bash
+docker tag agri-rag-assistant:local \
+<ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/agri-rag-assistant:latest
+```
+
+### Push
+
+```bash
+docker push \
+<ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/agri-rag-assistant:latest
+```
+
+READMEではAWSアカウントIDを公開せず、
+`<ACCOUNT_ID>` と表記しています。
+
+## AWS Secrets Manager
+
+OpenAI APIキーはAWS Secrets Managerに保存します。
+
+例：
+
+```json
+{
+  "OPENAI_API_KEY": "your-api-key"
+}
+```
+
+ECSタスク定義からJSON内の `OPENAI_API_KEY` の値だけを取得し、
+コンテナの環境変数として渡します。
+
+```text
+AWS Secrets Manager
+        |
+        v
+OPENAI_API_KEY
+        |
+        v
+ECS / Fargate Container
+        |
+        v
+OpenAI API
+```
+
+APIキーは以下には保存しません。
+
+- Gitリポジトリ
+- Dockerfile
+- Dockerイメージ
+- Docker build引数
+
+## ECS / Fargate
+
+動作確認した基本構成：
+
+```text
+Launch type: Fargate
+Container port: 8501
+Protocol: TCP
+Public IP: enabled
+```
+
+FargateタスクからOpenAI APIへのHTTPS通信を許可しています。
+
+ポートフォリオ検証ではFargateタスクのパブリックIPへ直接アクセスして
+Streamlitの動作を確認しました。
+
+## AWS上での動作確認
+
+**2026-09-22にAWS ECS / Fargate上で一連のRAG処理を確認しました。**
+
+確認した処理：
+
+```text
+Docker build
+    |
+    v
+Amazon ECR
+    |
+    v
+Amazon ECS / AWS Fargate
+    |
+    +--> AWS Secrets Manager
+    |       `--> OPENAI_API_KEY
+    |
+    +--> OpenAI Embeddings
+    |
+    +--> FAISS Index
+    |
+    +--> Top-K Retrieval
+    |
+    +--> OpenAI Answer Generation
+    |
+    v
+Streamlit
+    |
+    +--> 回答
+    +--> 引用元資料
+    `--> 類似度
+```
+
+実際に確認した項目：
+
+- Dockerイメージのビルド
+- Amazon ECRへのpush
+- ECS / Fargateタスク起動
+- Streamlit起動
+- ポート8501でのHTTPアクセス
+- Secrets ManagerからのAPIキー取得
+- OpenAI Embeddings APIへのアクセス
+- FAISS索引作成
+- 日本語農業資料のベクトル検索
+- OpenAIによる回答生成
+- 引用元資料の表示
+- 類似度の表示
+- CloudWatch Logsへのログ出力
+- Python TracebackのCloudWatchへの出力
+
+これにより、
+
+**Docker → ECR → ECS/Fargate → Secrets Manager → OpenAI API → FAISS → Streamlit**
+
+までのクラウド上の一連の処理を確認しています。
+
+## コシヒカリ出穂予測デモ
+
+公開用サンプルとして、
+
+```text
+data/sample_documents/koshihikari_heading_ja.md
+```
+
+を収録しています。
+
+この資料では、コシヒカリの出穂予測モデルを題材として、
+
+- 気温
+- 日長
+- DVR
+- DVI
+- 出穂閾値
+- ベイズ最適化
+- 実測出穂日と予測日の比較
+
+について説明しています。
+
+本アプリは資料を検索して説明するRAGであり、
+出穂日そのものを数値予測するモデルではありません。
+
+### 質問例
+
+Top-Kを3にして、
 
 > コシヒカリの出穂予測では、気温と日長をどのように利用しますか？
 
-資料にない具体式やパラメータは推測せず、根拠が不足する質問には
-`提供された資料からは確認できません` と答えるよう指示しています。
-オフラインテストは資料・引用の受け渡しを検証し、実際の検索順位と回答は
-`python scripts/diagnose_rag.py` で確認できます。
+と質問します。
 
-**実APIで確認した日本語回答例**
+実APIで確認した回答例：
 
 > コシヒカリの出穂予測では、日々の気温と日長を説明変数として生育速度DVRを求めます。DVRは1日あたりの生育の進み具合を表し、DVIは累積された生育ステージの指標として扱われます。設定した起算日の初期DVIに日々のDVRを加算し、DVIが設定した一定の閾値に達するか超える日を予測出穂日として扱います。[1]
 
-引用元は `koshihikari_heading_ja.md` です。Top-K=3の検索結果は以下のとおりです。
+引用元：
 
-|順位|資料|類似度|
-|---|---|---|
-|1|koshihikari_heading_ja.md|0.623739|
-|2|rice_heading_ja.md|0.500960|
-|3|rice_heat_ja.md|0.416785|
+```text
+koshihikari_heading_ja.md
+```
 
-単一実行の記録であり、順位や回答の再現を保証するものではありません。
-検索chunk全文と資料との照合結果は[検証記録](docs/koshihikari_demo_verification.md)を参照してください。
+実API検証時のTop-K=3：
 
-## Testing
+| 順位 | 資料 | 類似度 |
+| ---: | --- | ---: |
+| 1 | `koshihikari_heading_ja.md` | 0.623739 |
+| 2 | `rice_heading_ja.md` | 0.500960 |
+| 3 | `rice_heat_ja.md` | 0.416785 |
 
-### 索引作成の診断
+生成文や類似度は実行条件によって変化する可能性があります。
 
-開発時のみ `APP_ENV=development python -m streamlit run app.py` で起動すると、
-失敗時に「開発用エラー詳細」で原因例外を含むtracebackを確認できます。
-APIキーなどの秘密値は伏せ字にし、ローカル変数は出力しません。
-通常起動では詳細を表示しません。`.env` に `APP_ENV=development` を設定することもできます。
+詳細：
 
-`python scripts/diagnose_rag.py` は実APIを使い、`.env`、資料読込・chunk生成、
-Embedding、NumPyのshape/dtype、FAISS作成・保存・再読込、指定の日本語質問を順に検証します。
-成功時は `data/index/rag_verification.json` に検索chunk全文、スコア、回答、引用元を保存します。
-API利用料金が発生します。通信環境や認証設定による失敗は失敗段階とtracebackで確認できます。
+[docs/koshihikari_demo_verification.md](docs/koshihikari_demo_verification.md)
 
-After installing dependencies, run from the project directory:
+## エラー処理
+
+本番モードではユーザー画面に詳細なTracebackを表示しません。
+
+アプリケーション例外は、
+
+```python
+traceback.print_exc()
+```
+
+によってstderrへ出力します。
+
+ECSではこの出力をCloudWatch Logsから確認できます。
+
+これにより、ユーザーへ内部情報を直接表示せず、
+運用側では障害原因を確認できます。
+
+## 開発モード
+
+ローカル開発では、
+
+```bash
+APP_ENV=development python -m streamlit run app.py
+```
+
+として起動できます。
+
+開発モードではStreamlit画面に
+サニタイズしたTracebackを表示します。
+
+## RAG診断スクリプト
+
+```bash
+python scripts/diagnose_rag.py
+```
+
+で実APIを利用した診断を実行できます。
+
+確認項目：
+
+- `.env` 読み込み
+- 資料読み込み
+- チャンク生成
+- Embedding
+- NumPy shape / dtype
+- FAISS索引作成
+- 索引保存
+- 索引再読み込み
+- 日本語質問検索
+- 回答生成
+- 引用元確認
+
+成功時には、
+
+```text
+data/index/rag_verification.json
+```
+
+へ検証結果を保存できます。
+
+## テスト
 
 ```bash
 python -m pytest -q
 ```
 
-The suite requires no API key or external API calls.
-A fixture blocks network connections; deterministic embeddings and mock SDK clients
-exercise the pipeline while FAISS operations run locally.
+自動テストでは実OpenAI APIを呼びません。
 
-- Retrieval ranking, Top-K limits, persistence, model mismatch, and corrupt metadata.
-- Unicode chunk overlap, document loading, invalid inputs, and malformed vectors.
-- Retrieved-context isolation, citation mapping, invalid citation IDs, and empty results.
-- Embedding batches, stateless generation requests, and sanitized API errors.
-- Streamlit initial rendering and blank-question handling through `AppTest`.
-- An end-to-end ingestion → saved index → answer path with mocked OpenAI responses.
+ネットワーク接続をブロックし、
+決定論的EmbeddingとモックSDKクライアントを使用して
+RAGパイプラインを検証します。
 
-Verification has been performed on Python 3.12 / Linux and Python 3.11 in Docker.
-macOS, Windows, and full browser interaction have not been separately verified.
-A single live API demo was verified as documented in the report above.
+主なテスト対象：
 
-## Project Structure
+- Top-K検索
+- 検索順位
+- FAISS索引保存・読込
+- Embeddingモデル不一致
+- 壊れたmetadata
+- Unicode文書
+- チャンクオーバーラップ
+- 不正入力
+- ベクトルshape検証
+- 引用番号検証
+- 存在しない引用番号
+- 空検索結果
+- Embeddingバッチ処理
+- LLMリクエスト
+- APIエラー処理
+- Streamlit初期表示
+- 空質問処理
+- ingestion → index → retrieval → answer のE2Eテスト
+
+Python 3.12 / Linuxおよび
+Python 3.11 Docker環境で検証しています。
+
+さらにPython 3.11コンテナを
+AWS ECS / Fargate上で実行確認しています。
+
+## プロジェクト構成
 
 ```text
 agri-rag-assistant/
@@ -291,10 +620,13 @@ agri-rag-assistant/
 ├── .env.example
 ├── pytest.ini
 ├── app.py
+│
 ├── docs/
 │   └── koshihikari_demo_verification.md
+│
 ├── scripts/
 │   └── diagnose_rag.py
+│
 ├── src/
 │   ├── __init__.py
 │   ├── diagnostics.py
@@ -302,6 +634,7 @@ agri-rag-assistant/
 │   ├── retriever.py
 │   ├── llm.py
 │   └── rag.py
+│
 ├── tests/
 │   ├── conftest.py
 │   ├── test_koshihikari.py
@@ -309,6 +642,7 @@ agri-rag-assistant/
 │   ├── test_japanese.py
 │   ├── test_retriever.py
 │   └── test_rag.py
+│
 └── data/
     └── sample_documents/
         ├── irrigation.md
@@ -318,36 +652,113 @@ agri-rag-assistant/
         └── rice_heat_ja.md
 ```
 
-`data/index/` is created at runtime and holds `index.faiss` and `metadata.json`.
+## 設計上の判断
 
-## Design Decisions
-
-| Decision | Reason and tradeoff |
+| 設計 | 理由 |
 | --- | --- |
-| Small modules and injected dependencies | Keep ingestion, retrieval, and generation independently testable without framework-specific abstractions. |
-| Overlapping character windows | Simple bounded chunks support English and Japanese text; sentence boundaries and token counts are not preserved. |
-| Normalized vectors with `IndexFlatIP` | Inner product becomes cosine similarity; exact search is easy to inspect but memory and query cost grow with the corpus. |
-| FAISS plus JSON metadata | Preserve source attribution without Python pickle; model and record-count checks catch common incompatibilities. Files still require local trust. |
-| Stateless generation | Each request uses only the current question and retrieved excerpts, with no tools or conversation history. |
-| Numeric citation validation | Reject references to nonexistent excerpts and derive filenames from actual retrieval results; this does not prove a claim is supported. |
-| Mock API clients, real FAISS tests | Verify application behavior without credentials, network dependence, or API charges; model quality needs a separate evaluation. |
-| Dependency version ranges | Allow compatible updates rather than exact patch pins. NumPy is used directly; pytest is the test dependency. This is not a locked environment. |
+| RAGフレームワークを使わず小さなモジュールに分割 | 各処理を理解・テストしやすくするため |
+| オーバーラップ付き文字チャンク | 日本語・英語を単純な方式で処理するため |
+| FAISS `IndexFlatIP` | 正規化ベクトルによりコサイン類似度検索を実装するため |
+| FAISS + JSON metadata | pickleを使わず引用元情報を保存するため |
+| Statelessな回答生成 | 質問ごとに検索結果だけを根拠として渡すため |
+| 引用番号検証 | 存在しない検索結果への引用を防ぐため |
+| モックAPI + 実FAISSテスト | API料金やネットワークに依存せずテストするため |
+| 非root Docker | コンテナの実行権限を限定するため |
+| Secrets Manager | APIキーをDocker/Gitから分離するため |
+| ECS / Fargate | VMを管理せず同一Dockerイメージをクラウド実行するため |
+| CloudWatch Logs | ユーザー画面に内部エラーを出さず運用側で確認するため |
 
-## Limitations / Future Work
+## 制約・今後の改善
 
-- **Grounding:** prompts cannot guarantee factual answers or prevent all prompt injection.
-  Answers without citations are displayed with a notice; valid citation IDs do not prove
-  semantic support. Add claim-level citation checks and evaluate abstention behavior.
-- **Retrieval quality:** Top-K always selects the nearest available chunks, even for
-  unrelated questions. Add a labeled agricultural QA dataset, retrieval metrics,
-  calibrated relevance thresholds, and reranking.
-- **Chunking and input size:** character windows can split sentences. Questions have no
-  explicit token limit, so very long input may fail at the API. Add token-aware splitting
-  and request-budget validation.
-- **Storage:** index files are not written transactionally, and source changes are not
-  automatically detected. Add corpus fingerprints and atomic index replacement.
-- **Deployment:** the app assumes a local, trusted, single-user environment. Authentication,
-  per-user storage, concurrency control, and production monitoring are not implemented.
-- **Validation:** broader live model quality and cross-platform installation remain to be checked.
-  Add CI across supported Python versions and record a reproducible live demo separately
-  from the illustrative example above.
+### 検索品質
+
+現在は最も近いTop-Kチャンクを必ず取得します。
+
+今後は、
+
+- 農業QA評価データセット
+- relevance threshold
+- reranking
+- retrieval metrics
+
+などを追加できます。
+
+### チャンク分割
+
+現在は文字数ベースです。
+
+文章途中で分割される可能性があるため、
+token-aware chunkingやsemantic chunkingへの改善余地があります。
+
+### 永続ストレージ
+
+現在のAWSデモではFAISS索引はコンテナローカルに生成します。
+
+本格運用では、
+
+- Amazon EFS
+- S3を利用した索引配布
+- 外部Vector DB
+
+などを検討できます。
+
+### 複数タスク
+
+複数コンテナから同時に索引更新する構成には対応していません。
+
+### AWS公開構成
+
+今回のAWS検証では、FargateのパブリックIPとポート8501を利用して
+Streamlitへ直接アクセスしています。
+
+これはポートフォリオ動作確認用です。
+
+本番運用では、
+
+- HTTPS
+- Application Load Balancer
+- 認証
+- アクセス制御
+- private subnet
+- 永続ストレージ
+- メトリクス
+- アラート
+
+などを追加する必要があります。
+
+## セキュリティ
+
+以下はGitへコミットしません。
+
+```text
+.env
+OPENAI_API_KEY
+AWS credentials
+Secrets Manager secret values
+```
+
+公開するのは、
+
+```text
+.env.example
+```
+
+のみです。
+
+APIキーなどの秘密情報がスクリーンショット、ログ、Git履歴などへ
+露出した場合は、そのキーを失効して新しいキーへ交換してください。
+
+## ステータス
+
+**AWS ECS / Fargate上でのRAGアプリ動作確認済み（2026-09-22）**
+
+確認済み：
+
+**農業資料 → Embedding → FAISS検索 → LLM回答 → 引用表示**
+
+および、
+
+**Docker → Amazon ECR → Amazon ECS / AWS Fargate → AWS Secrets Manager → CloudWatch Logs**
+
+までを含む、コンテナ化された農業RAGアプリケーションの
+エンドツーエンド構成を実装しています。
