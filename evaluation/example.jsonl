@@ -1,0 +1,2 @@
+{"question":"イネの高温障害について", "relevant_ids":["rice_heat_01"], "retrieved_ids":["rice_heat_01","rice_disease_03","rice_water_02"]}
+{"question":"水稲の水管理方法は？", "relevant_ids":["rice_water_02"], "retrieved_ids":["rice_heat_01","rice_water_02","rice_disease_03"]}
