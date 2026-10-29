@@ -6,6 +6,10 @@ on:
       - main
       - "feature/**"
   pull_request:
+  workflow_dispatch:
+  schedule:
+    # Every Monday at 00:23 UTC (09:23 JST)
+    - cron: "23 0 * * 1"
 
 permissions:
   contents: read
@@ -27,4 +31,15 @@ jobs:
       - name: Run tests offline
         run: python -m pytest -q
       - name: Evaluate sample ranking
-        run: python scripts/evaluate_retrieval.py --input evaluation/example.jsonl --k 3
+        shell: bash
+        run: |
+          python scripts/evaluate_retrieval.py --input evaluation/example.jsonl --k 3 | tee retrieval-results.txt
+          {
+            echo '## Sample retrieval evaluation'
+            echo ''
+            echo 'Offline example only; not a production-quality accuracy estimate.'
+            echo ''
+            echo '~~~text'
+            cat retrieval-results.txt
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
